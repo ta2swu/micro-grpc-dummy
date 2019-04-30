@@ -1,79 +1,61 @@
 package main
 
 import (
-	"context"
+	"fmt"
 	"io"
 	"log"
-	"math/rand"
 	"strconv"
 	"time"
 
-	//proto "github.com/micro/examples/stream/server/proto"
+	"context"
 
-	pb "servicestt/exproto"
+	proto "dummystream/bidirectionaldummy"
 
-	"google.golang.org/grpc"
+	"github.com/micro/go-micro"
 )
 
-type ourStreamer struct {
-}
-
-func main() {
-
-	rand.Seed(time.Now().Unix())
-
-	// dail server
-	conn, err := grpc.Dial(":50005", grpc.WithInsecure())
+func BidirectionalStream(cl proto.DummyStreamService) {
+	// create streaming client
+	ctx := context.Background()
+	stream, err := cl.Stream(ctx)
 	if err != nil {
-		log.Fatalf("can not connect with server %v", err)
+		fmt.Println("err:", err)
+		return
 	}
 
-	// create stream
-	client := pb.NewMystreamClient(conn)
-	stream, err := client.Exstream(context.Background())
-	if err != nil {
-		log.Fatalf("openn stream error %v", err)
-	}
-
-	ctx := stream.Context()
 	done := make(chan bool)
+	// bidirectional stream
+	// send  messages for a 20 count
+
 	go func() {
-		for i := 1; i <= 100; i++ {
-			// generate random nummber and send it to stream
-			rnd := rand.Intn(i)
+		for j := 0; j < 30; j++ {
 
-			str := strconv.Itoa(rnd)
-			str = "this is message : " + str
-			req := pb.Request{Reqmsg: str}
-			if err := stream.Send(&req); err != nil {
-				log.Fatalf("can not send %v", err)
-			}
-			log.Printf(" SENT MESSAGE : ", req.Reqmsg)
-			time.Sleep(time.Millisecond * 200)
-		}
-		if err := stream.CloseSend(); err != nil {
-			log.Println(err)
-		}
-	}()
+			fmt.Println(" send message : ", j)
+			time.Sleep(1000 * time.Millisecond)
 
-	// second goroutine receives data from stream	 
- 	go func() {
-		for {
-			resp, err := stream.Recv()
+			message := "client message : " + strconv.Itoa(j)
+
+			err := stream.Send(&proto.Request{Reqmsg: message})
 			if err == io.EOF {
 				close(done)
 				return
 			}
 			if err != nil {
-				log.Fatalf("can not receive %v", err)
+				log.Fatalf("can not send %v", err)
 			}
-			reponsemessage := resp.Resmsg
-			log.Printf("received: ", reponsemessage)
 		}
 	}()
+	go func() {
+		for {
 
-	// third goroutine closes done channel
-	// if context is done
+			rsp, err := stream.Recv()
+			if err != nil {
+				fmt.Println("recv err", err)
+				break
+			}
+			fmt.Printf("\n got msg :", rsp.Resmsg)
+		}
+	}()
 	go func() {
 		<-ctx.Done()
 		if err := ctx.Err(); err != nil {
@@ -83,4 +65,25 @@ func main() {
 	}()
 
 	<-done
+
+	fmt.Println("streaming done")
+
+}
+
+func main() {
+	//consulReg := cReg.NewRegistry(registry.Addrs("http://127.0.0.1:80"))
+
+	service := micro.NewService(
+	//micro.Name("dummy.stream.client"),
+	//micro.Transport(trns),
+	//micro.Registry(consulReg),
+	)
+	service.Init()
+
+	// create client
+	cl := proto.NewDummyStreamService("dummy.stream", service.Client())
+	// bidirectional-stream
+	time.Sleep(3 * time.Second)
+	BidirectionalStream(cl)
+
 }
