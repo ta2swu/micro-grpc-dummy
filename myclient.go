@@ -37,9 +37,6 @@ func main() {
 
 	ctx := stream.Context()
 	done := make(chan bool)
-
-	// first goroutine sends random increasing numbers to stream
-	// and closes int after 10 iterations
 	go func() {
 		for i := 1; i <= 100; i++ {
 			// generate random nummber and send it to stream
@@ -59,11 +56,8 @@ func main() {
 		}
 	}()
 
-	// second goroutine receives data from stream
-	// and saves result in max variable
-	//
-	// if stream is finished it closes done channel
-	go func() {
+	// second goroutine receives data from stream	 
+ 	go func() {
 		for {
 			resp, err := stream.Recv()
 			if err == io.EOF {
