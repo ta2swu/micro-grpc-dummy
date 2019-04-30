@@ -3,78 +3,79 @@ package main
 import (
 	"fmt"
 	"log"
-	"net"
 
-	//proto "github.com/micro/examples/stream/server/proto"
+	"context"
 
-	pb "servicestt/exproto"
+	proto "dummystream/bidirectionaldummy"
 
-	"google.golang.org/grpc"
+	"github.com/micro/go-micro"
 )
 
-type ourStreamer struct {
-}
+type Streamer struct{}
 
-func (s *ourStreamer) Exstream(streamServer pb.Mystream_ExstreamServer) error {
+func (e *Streamer) Stream(ctx context.Context, stream proto.DummyStream_StreamStream) error {
 
-	stream := streamServer
+	mystream := stream
 	fmt.Println("should print only one time ")
 	//ctx := stream.Context()
-	intchan := make(chan string)
-	go gomessage(stream, intchan)
+	stringchan := make(chan string)
+
+	i := 0
+	go Sendmessage(stringchan, mystream)
+	//(intchan, stream)
 	for {
-		req, err := stream.Recv()
+
+		i++
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		rmsg, err := mystream.Recv()
 		if err != nil {
 			return err
 		}
 
-		mybyte := req.Reqmsg
-		intchan <- mybyte
-		log.Printf("Got msg %v", req.Reqmsg)
-
+		myessage := rmsg.Reqmsg
+		stringchan <- myessage
+		log.Println("message recieved ", myessage)
 	}
 
-	//fmt.Println("streming done")
-	//
 	return nil
-
 }
 
-func gomessage(stream pb.Mystream_ExstreamServer, intchan chan string) {
+func Sendmessage(stringchan chan string, mystream proto.DummyStream_StreamStream) {
 
 	for {
 
-		m := <-intchan
-
-		if err := stream.Send(&pb.Response{Resmsg: m}); err != nil {
+		message := <-stringchan
+		message = "reply from server : " + message
+		sendmsg := &proto.Response{Resmsg: message}
+		if err := mystream.Send(sendmsg); err != nil {
 			fmt.Println(" error sending", err)
 		}
-		fmt.Println("server sent message: ", m)
+		fmt.Println("server sent message: ", message)
+
 	}
 }
 
-// type MystreamServer interface {
-// 	Exstream(Mystream_ExstreamServer) error
-// }
-
 func main() {
+	// new service
+	//consulReg := cReg.NewRegistry(registry.Addrs("http://127.0.0.1:80"))
 
-	lis, err := net.Listen("tcp", ":50005")
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
-	}
+	service := micro.NewService(
+		micro.Name("dummy.stream"),
+	// micro.Registry(consulReg),
+	)
 
-	fmt.Println("server initilized ")
-	// create grpc server
-	s := grpc.NewServer()
-	pb.RegisterMystreamServer(s, &ourStreamer{})
+	// Init command line
 
-	// and start...
-	if err := s.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
-	}
+	// Register Handler
+	proto.RegisterDummyStreamHandler(service.Server(), new(Streamer))
 
-	/*if err := service.Run(); err != nil {
+	// Run service
+	if err := service.Run(); err != nil {
 		log.Fatal(err)
-	}*/
+	}
 }
