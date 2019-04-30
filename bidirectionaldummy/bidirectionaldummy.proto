@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+service DummyStream {
+	rpc Stream(stream Request) returns (stream Response) {}
+	 
+}
+
+message Request {
+	string Reqmsg = 1;
+}
+
+message Response {
+	string Resmsg = 1;
+}
